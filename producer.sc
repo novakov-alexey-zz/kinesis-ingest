@@ -9,6 +9,7 @@ import org.scalacheck.Gen
 
 import scala.util.Random
 import scala.collection.mutable.ArrayBuffer
+import java.util.Date
 
 implicit val region = Regions.EU_CENTRAL_1
 
@@ -22,6 +23,7 @@ val sensor2 = Sensor(2, -48.8712, -151.6866, "456 Side St, SFO, CA")
 
 val sensors = Gen.oneOf(sensor1, sensor2)
 val temperature = Gen.choose(21f, 25f)
+val requests = Gen.choose(1, 10)
 
 def genEvent =
   for {
@@ -29,8 +31,9 @@ def genEvent =
     t <- temperature
   } yield Event(System.currentTimeMillis(), t, s)
 
-def genBatch(size: Int = 10) =
+def genBatch =
   for {
+    size <- requests
     events <- Gen.listOfN(size, genEvent)
     dataBatch = events.map(_.asJson.noSpaces)
   } yield dataBatch
@@ -44,7 +47,7 @@ def putEntry(key: Long, data: String) =
 def genRequest(streamName: String, shards: Byte) = {
   val time = System.currentTimeMillis()
   val entries =
-    genBatch(5).sample
+    genBatch.sample
       .foldLeft(ArrayBuffer.empty[PutRecordsEntry]) { case (acc, events) =>
         println(events.mkString("\n"))
         acc ++ events.map(e => putEntry((time % shards).toInt, e))
@@ -57,10 +60,11 @@ def genRequest(streamName: String, shards: Byte) = {
 @main
 def main(
     streamName: String @arg(
-      doc = "AWS Kinesis Stream name"
+      doc = "Kinesis Stream name"
     ),
     shardsCount: Byte @arg(
-      doc = "AWS Kinesis number of shards to be used partitin key calculation"
+      doc =
+        "Number of shards for Kinesis Stream to be used in partitin key calculation"
     ),
     delay: Long @arg(doc = "Delay between each batch request in milliseconds") =
       1000
@@ -68,5 +72,11 @@ def main(
   Iterator
     .continually(genRequest(streamName, shardsCount))
     .takeWhile(_ => true)
-    .foreach(_ => Thread.sleep(delay))
+    .foreach { _ =>
+      val currentSeconds = System.currentTimeMillis() / 1000
+      if (currentSeconds % 60 == 0) {
+        println(s"New window at: ${new Date()}")
+      }
+      Thread.sleep(delay)
+    }
 }

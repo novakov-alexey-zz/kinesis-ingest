@@ -2,33 +2,30 @@ import $ivy.`jp.co.bizreach::aws-kinesis-scala:0.0.12`
 
 import jp.co.bizreach.kinesis.CreateStreamRequest
 import jp.co.bizreach.kinesis._
+
 import com.amazonaws.regions.Regions
 import com.amazonaws.services.kinesis.AmazonKinesisClientBuilder
+
 import com.amazonaws.services.kinesisanalytics.AmazonKinesisAnalytics
 import com.amazonaws.services.kinesisanalytics.AmazonKinesisAnalyticsClientBuilder
-import com.amazonaws.services.kinesisanalytics.model.CreateApplicationRequest
-import com.amazonaws.services.kinesisanalytics.model.KinesisStreamsInput
-import com.amazonaws.services.kinesisanalytics.model.Input
-import com.amazonaws.services.kinesisanalytics.model.DiscoverInputSchemaRequest
-import com.amazonaws.services.kinesisanalytics.model.SourceSchema
-import com.amazonaws.services.kinesisanalytics.model.InputStartingPositionConfiguration
-import com.amazonaws.services.kinesisanalytics.model.InputStartingPosition
-import com.amazonaws.services.kinesisanalytics.model.DeleteApplicationRequest
-import com.amazonaws.services.kinesisanalytics.model.ListApplicationsRequest
-import com.amazonaws.services.kinesisanalytics.model.DescribeApplicationRequest
-import com.amazonaws.services.kinesisanalytics.model.StartApplicationRequest
-import java.util.Date
+import com.amazonaws.services.kinesisanalytics.model._
+
+import com.amazonaws.services.kinesisfirehose.AmazonKinesisFirehoseClientBuilder
+import com.amazonaws.services.kinesisfirehose.model._
+
 import scala.util.Using
 import scala.jdk.CollectionConverters._
 import scala.io.Source
-import com.amazonaws.services.kinesisanalytics.model.InputConfiguration
-import com.amazonaws.services.kinesisanalytics.model.StopApplicationRequest
+
+import java.util.Date
 
 val region = Regions.EU_CENTRAL_1
 lazy val streams =
   AmazonKinesisClientBuilder.standard().withRegion(region).build()
 lazy val apps =
   AmazonKinesisAnalyticsClientBuilder.standard().withRegion(region).build()
+lazy val firehoses =
+  AmazonKinesisFirehoseClientBuilder.standard().withRegion(region).build()
 
 @main
 def createStream(
@@ -57,6 +54,10 @@ def createApplication(
     name: String @arg(doc = "AWS Kinesis Analytics Application"),
     inputArn: String @arg(doc = "AWS Kinesis Stream ARN"),
     roleArn: String @arg(doc = "AWS Kinesis Analytics App Role"),
+    outputFirehoseArn: String @arg(doc = "AWS Kinesis Firehose ARN"),
+    destStreamName: String @arg(
+      doc = "SQL in-application stream name for destination"
+    ),
     sqlFilePath: String @arg(
       doc = "Path to a file with Kinesis Analytics SQL statements"
     )
@@ -85,12 +86,28 @@ def createApplication(
   Using.resource(Source.fromFile(sqlFilePath)) { f =>
     appRequest.withApplicationCode(f.getLines().toList.mkString("\n"))
   }
+
+  val output = new Output()
+  val firehoseOutput = new KinesisFirehoseOutput()
+    .withResourceARN(outputFirehoseArn)
+    .withRoleARN(roleArn)
+
+  output.setKinesisFirehoseOutput(firehoseOutput)
+  output.setName(destStreamName)
+
+  val destSchema = new DestinationSchema()
+  output.setDestinationSchema(
+    destSchema.withRecordFormatType(RecordFormatType.JSON)
+  )
+
+  appRequest.withOutputs(output)
+
   val res = apps.createApplication(appRequest)
   print(res)
 }
 
 @main def deleteApplication(
-    name: String @arg(doc = "AWS Kinesis Analytics Application")
+    name: String @arg(doc = "Kinesis Analytics Application")
 ) = {
   val descReq = new DescribeApplicationRequest()
   val resDesc = apps.describeApplication(descReq.withApplicationName(name))
@@ -100,10 +117,9 @@ def createApplication(
 }
 
 @main def startApplication(
-    name: String @arg(doc = "AWS Kinesis Analytics Application")
+    name: String @arg(doc = "Kinesis Analytics Application")
 ) = {
-  val req = new StartApplicationRequest()
-  req.setApplicationName(name)
+  val req = new StartApplicationRequest().withApplicationName(name)
   val inputCfg = new InputConfiguration()
   inputCfg.setInputStartingPositionConfiguration(
     new InputStartingPositionConfiguration().withInputStartingPosition(
@@ -129,9 +145,35 @@ def createApplication(
 }
 
 @main def stopApplication(
-  name: String @arg(doc = "AWS Kinesis Analytics Application")
+    name: String @arg(doc = "AWS Kinesis Analytics Application")
 ) = {
-  val req = new StopApplicationRequest()
-  req.setApplicationName(name)
+  val req = new StopApplicationRequest().withApplicationName(name)
   apps.stopApplication(req)
+}
+
+@main def createFirehose(
+    name: String @arg(doc = "Kinesis Firehose"),
+    destBucketArn: String @arg(doc = "S3 destinaton bucket ARN"),
+    iamRole: String @arg(doc = "S3 IAM role ARN for Firehose instance")
+) = {
+  val req = new CreateDeliveryStreamRequest()
+    .withDeliveryStreamName(name)
+    .withDeliveryStreamType("DirectPut")
+  val s3 = new ExtendedS3DestinationConfiguration()
+    .withBucketARN(destBucketArn)
+    .withRoleARN(iamRole)
+    .withBufferingHints(
+      new BufferingHints()
+        .withIntervalInSeconds(60)
+        .withSizeInMBs(1)
+    )
+  req.setExtendedS3DestinationConfiguration(s3)
+  val res = firehoses.createDeliveryStream(req)
+  println(res)
+}
+
+@main def deleteFirehose(name: String @arg(doc = "Kinesis Firehose")) = {
+  val req = new DeleteDeliveryStreamRequest().withDeliveryStreamName(name)
+  val res = firehoses.deleteDeliveryStream(req)
+  println(res)
 }
