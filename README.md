@@ -3,7 +3,7 @@
 ## Pre-requisites
 
 -   Java 8 or higher
--   Ammonite
+-   Scala [Ammonite](https://ammonite.io/#Ammonite-REPL)
 -   GNU Make (optional)
 
 ## Workflow
