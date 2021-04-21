@@ -30,10 +30,10 @@ lazy val firehoses =
 @main
 def createStream(
     name: String @arg(
-      doc = "AWS Kinesis Stream name"
+      doc = "Kinesis Stream name"
     ),
     shardsCount: Byte @arg(
-      doc = "AWS Kinesis number of shards to be used partitin key calculation"
+      doc = "Kinesis number of shards to be used partitin key calculation"
     )
 ) = {
   val createStreamRequest = CreateStreamRequest(name, shardsCount)
@@ -44,17 +44,17 @@ def createStream(
 @main
 def deleteStream(
     name: String @arg(
-      doc = "AWS Kinesis Stream name"
+      doc = "Kinesis Stream name"
     )
 ) =
   println(streams.deleteStream(name))
 
 @main
 def createApplication(
-    name: String @arg(doc = "AWS Kinesis Analytics Application"),
-    inputArn: String @arg(doc = "AWS Kinesis Stream ARN"),
-    roleArn: String @arg(doc = "AWS Kinesis Analytics App Role"),
-    outputFirehoseArn: String @arg(doc = "AWS Kinesis Firehose ARN"),
+    name: String @arg(doc = "Kinesis Analytics Application"),
+    inputArn: String @arg(doc = "Kinesis Stream ARN"),
+    roleArn: String @arg(doc = "Kinesis Analytics App Role"),
+    outputFirehoseArn: String @arg(doc = "Kinesis Firehose ARN"),
     destStreamName: String @arg(
       doc = "SQL in-application stream name for destination"
     ),
@@ -145,7 +145,7 @@ def createApplication(
 }
 
 @main def stopApplication(
-    name: String @arg(doc = "AWS Kinesis Analytics Application")
+    name: String @arg(doc = "Kinesis Analytics Application")
 ) = {
   val req = new StopApplicationRequest().withApplicationName(name)
   apps.stopApplication(req)
@@ -154,7 +154,7 @@ def createApplication(
 @main def createFirehose(
     name: String @arg(doc = "Kinesis Firehose"),
     destBucketArn: String @arg(doc = "S3 destinaton bucket ARN"),
-    iamRole: String @arg(doc = "S3 IAM role ARN for Firehose instance")
+    iamRole: String @arg(doc = "ARN of S3 IAM role for Firehose instance")
 ) = {
   val req = new CreateDeliveryStreamRequest()
     .withDeliveryStreamName(name)

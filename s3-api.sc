@@ -10,7 +10,7 @@ implicit val client = S3.at(Region.EU_CENTRAL_1)
       doc = "Unique S3 bucket name"
     )
 ) = {
-  val bucket = client.createBucket(name)
+  client.createBucket(name)
   println(s"Bucket with name '$name' has been created")
 }
 
