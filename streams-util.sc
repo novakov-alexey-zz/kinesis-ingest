@@ -13,12 +13,16 @@ import com.amazonaws.services.kinesisanalytics.model.DiscoverInputSchemaRequest
 import com.amazonaws.services.kinesisanalytics.model.SourceSchema
 import com.amazonaws.services.kinesisanalytics.model.InputStartingPositionConfiguration
 import com.amazonaws.services.kinesisanalytics.model.InputStartingPosition
-import scala.util.Using
 import com.amazonaws.services.kinesisanalytics.model.DeleteApplicationRequest
-import java.util.Date
 import com.amazonaws.services.kinesisanalytics.model.ListApplicationsRequest
-import scala.jdk.CollectionConverters._
 import com.amazonaws.services.kinesisanalytics.model.DescribeApplicationRequest
+import com.amazonaws.services.kinesisanalytics.model.StartApplicationRequest
+import java.util.Date
+import scala.util.Using
+import scala.jdk.CollectionConverters._
+import scala.io.Source
+import com.amazonaws.services.kinesisanalytics.model.InputConfiguration
+import com.amazonaws.services.kinesisanalytics.model.StopApplicationRequest
 
 val region = Regions.EU_CENTRAL_1
 lazy val streams =
@@ -28,25 +32,25 @@ lazy val apps =
 
 @main
 def createStream(
-    streamName: String @arg(
+    name: String @arg(
       doc = "AWS Kinesis Stream name"
     ),
     shardsCount: Byte @arg(
       doc = "AWS Kinesis number of shards to be used partitin key calculation"
     )
 ) = {
-  val createStreamRequest = CreateStreamRequest(streamName, shardsCount)
+  val createStreamRequest = CreateStreamRequest(name, shardsCount)
   val res = streams.createStream(createStreamRequest)
   println(res)
 }
 
 @main
 def deleteStream(
-    streamName: String @arg(
+    name: String @arg(
       doc = "AWS Kinesis Stream name"
     )
 ) =
-  println(streams.deleteStream(streamName))
+  println(streams.deleteStream(name))
 
 @main
 def createApplication(
@@ -60,10 +64,10 @@ def createApplication(
   val discover = new DiscoverInputSchemaRequest()
   discover.setResourceARN(inputArn)
   discover.setRoleARN(roleArn)
-  val position = new InputStartingPositionConfiguration()
-
   discover.setInputStartingPositionConfiguration(
-    position.withInputStartingPosition(InputStartingPosition.TRIM_HORIZON)
+    new InputStartingPositionConfiguration().withInputStartingPosition(
+      InputStartingPosition.TRIM_HORIZON
+    )
   )
   val schemaResult = apps.discoverInputSchema(discover)
 
@@ -78,7 +82,7 @@ def createApplication(
 
   val appRequest = new CreateApplicationRequest()
   appRequest.withInputs(input).withApplicationName(name)
-  Using.resource(scala.io.Source.fromFile(sqlFilePath)) { f =>
+  Using.resource(Source.fromFile(sqlFilePath)) { f =>
     appRequest.withApplicationCode(f.getLines().toList.mkString("\n"))
   }
   val res = apps.createApplication(appRequest)
@@ -93,4 +97,41 @@ def createApplication(
   val req = new DeleteApplicationRequest()
   req.withCreateTimestamp(resDesc.getApplicationDetail().getCreateTimestamp())
   apps.deleteApplication(req.withApplicationName(name))
+}
+
+@main def startApplication(
+    name: String @arg(doc = "AWS Kinesis Analytics Application")
+) = {
+  val req = new StartApplicationRequest()
+  req.setApplicationName(name)
+  val inputCfg = new InputConfiguration()
+  inputCfg.setInputStartingPositionConfiguration(
+    new InputStartingPositionConfiguration().withInputStartingPosition(
+      InputStartingPosition.TRIM_HORIZON
+    )
+  )
+  val descReq = new DescribeApplicationRequest()
+  val resDesc = apps.describeApplication(descReq.withApplicationName(name))
+  val id = resDesc
+    .getApplicationDetail()
+    .getInputDescriptions()
+    .asScala
+    .headOption
+    .map(_.getInputId())
+    .getOrElse(
+      sys.error(
+        s"There are no inputs to take an id to start an aplication ${name}"
+      )
+    )
+  inputCfg.setId(id)
+  req.setInputConfigurations(List(inputCfg).asJava)
+  apps.startApplication(req)
+}
+
+@main def stopApplication(
+  name: String @arg(doc = "AWS Kinesis Analytics Application")
+) = {
+  val req = new StopApplicationRequest()
+  req.setApplicationName(name)
+  apps.stopApplication(req)
 }
