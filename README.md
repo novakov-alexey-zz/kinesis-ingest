@@ -6,7 +6,7 @@
 -   Ammonite
 -   GNU Make (optional)
 
-## Workflow
+## Setup
 
 ### Create IAM roles for Firehose & Analytics
 

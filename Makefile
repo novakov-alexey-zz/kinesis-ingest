@@ -23,8 +23,10 @@ DESTINATION_BUCKET="arn:aws:s3:::raw-data-sensors"
 # Local commands
 
 # AWS MFA login script is there: https//github.com/novakov-alexey/aws-mfa-login.git
+#
+# example usage: make aws-login token="your value here"
 aws-login:	
-	aws configure	
+	aws configure
 	amm ../aws-mfa-login/aws-mfa-login.sc \
 		--arnMfaDevice "$(ARN_MFA_DEVICE)" \
 		--mfaToken $(token)
